@@ -17,7 +17,24 @@ SubFit works by:
 3. Comparing your draft against both, and showing a risk score +
    highlighted draft explaining why each flagged part is risky.
 
-Everything runs locally. SubFit is **read-only** — it never posts, comments,
+## Two ways to run SubFit
+
+| | This directory (below) | [`web/`](web/README.md) |
+|---|---|---|
+| Stack | Python: FastAPI + Streamlit + SQLite | Next.js (React + API routes) + Postgres |
+| Hosting | Your own machine only | Vercel (or any Node host) |
+| Corpus fetch | One blocking request | Chunked, polled with a progress bar (serverless-timeout-safe) |
+| Embeddings | sentence-transformers (Python) | transformers.js (Node, no Python) |
+
+Both implement the same core logic (TF-IDF vocabulary fingerprinting,
+AutoModerator parsing, risk scoring) and degrade the same way if the
+embedding model can't load — pick whichever fits how you want to run this.
+The rest of this README covers the local Python version; see
+[`web/README.md`](web/README.md) for the Vercel-hosted version.
+
+---
+
+Everything below runs locally. SubFit is **read-only** — it never posts, comments,
 votes, or otherwise writes to Reddit.
 
 ## Architecture
