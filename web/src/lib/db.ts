@@ -10,28 +10,47 @@ import type {
   SubredditStatus,
 } from "./types";
 
-const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-if (!connectionString) {
-  throw new Error(
-    "DATABASE_URL (or POSTGRES_URL) is not set. Provision a Postgres database " +
-      "(e.g. Vercel Postgres / Neon) and set the connection string in your env vars."
-  );
-}
-
 // A single pooled connection per server process (reused across warm serverless
 // invocations); Postgres needs SSL for most hosted providers (Neon/Vercel Postgres).
+//
+// The connection string is validated lazily (on first actual query), not at
+// module load time: Next.js imports route modules during the build's "collect
+// page data" step, and an eager throw here would fail the entire build if
+// DATABASE_URL isn't set yet at build time, even though it only needs to be
+// set at runtime.
 const globalForPg = globalThis as unknown as { pgPool?: Pool };
 
-export const pool =
-  globalForPg.pgPool ??
-  new Pool({
+function createPool(): Pool {
+  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL (or POSTGRES_URL) is not set. Provision a Postgres database " +
+        "(e.g. Vercel Postgres / Neon) and set the connection string in your env vars."
+    );
+  }
+  return new Pool({
     connectionString,
     ssl: connectionString.includes("localhost") || connectionString.includes("127.0.0.1")
       ? false
       : { rejectUnauthorized: false },
     max: 5,
   });
-globalForPg.pgPool = pool;
+}
+
+function getPool(): Pool {
+  if (!globalForPg.pgPool) {
+    globalForPg.pgPool = createPool();
+  }
+  return globalForPg.pgPool;
+}
+
+export const pool = new Proxy({} as Pool, {
+  get(_target, prop) {
+    const real = getPool();
+    const value = Reflect.get(real, prop, real);
+    return typeof value === "function" ? value.bind(real) : value;
+  },
+});
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS subreddits (
