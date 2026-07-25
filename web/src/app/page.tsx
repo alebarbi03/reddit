@@ -35,14 +35,15 @@ export default function Home() {
         </div>
       )}
       {health && !health.reddit_configured && (
-        <div className="mb-6 rounded border border-yellow-300 bg-yellow-50 text-yellow-900 px-3 py-2 text-sm">
-          Backend connected, but Reddit API credentials are not set. Add REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET to your
-          environment variables and redeploy/restart.
+        <div className="mb-6 rounded border border-blue-300 bg-blue-50 text-blue-900 px-3 py-2 text-sm">
+          Backend connected. Using Reddit&apos;s public API anonymously (no app credentials set) — this works fine for
+          light use, just with lower rate limits. Add REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET to your environment
+          variables for higher limits.
         </div>
       )}
       {health && health.reddit_configured && (
         <div className="mb-6 rounded border border-green-300 bg-green-50 text-green-800 px-3 py-2 text-sm">
-          Backend connected. Reddit credentials configured.
+          Backend connected. Using authenticated Reddit API access.
         </div>
       )}
 

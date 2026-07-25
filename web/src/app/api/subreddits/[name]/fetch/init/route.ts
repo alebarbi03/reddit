@@ -12,7 +12,6 @@ import {
   fetchSubredditMeta,
   normalizeSubredditName,
   parseAutomodKeywords,
-  RedditNotConfigured,
 } from "@/lib/reddit";
 
 export const dynamic = "force-dynamic";
@@ -40,9 +39,6 @@ export async function POST(req: Request, ctx: RouteContext<"/api/subreddits/[nam
   try {
     meta = await fetchSubredditMeta(name);
   } catch (e) {
-    if (e instanceof RedditNotConfigured) {
-      return Response.json({ detail: e.message }, { status: 503 });
-    }
     return Response.json(
       { detail: `Reddit API error: ${e instanceof Error ? e.message : String(e)}` },
       { status: 502 }

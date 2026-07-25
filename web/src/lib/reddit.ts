@@ -1,15 +1,23 @@
 /**
- * Read-only Reddit access via plain fetch() + OAuth2 client_credentials
- * (the "application only" flow a script app uses for read-only access,
- * equivalent to what PRAW does with read_only=True). Never posts, comments,
- * votes, or otherwise writes to Reddit.
+ * Read-only Reddit access via plain fetch(). Never posts, comments, votes,
+ * or otherwise writes to Reddit.
+ *
+ * Two modes, chosen automatically:
+ *  - Authenticated: if REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET are set, uses
+ *    OAuth2 client_credentials (the "application only" flow a script app
+ *    uses for read-only access, equivalent to PRAW's read_only=True) against
+ *    oauth.reddit.com. Higher rate limits.
+ *  - Anonymous fallback: if no credentials are configured, falls back to
+ *    Reddit's public, unauthenticated `.json` endpoints on www.reddit.com.
+ *    No Reddit app/registration needed at all -- lower rate limits, but
+ *    enough for personal use and testing. This is what makes the app work
+ *    out of the box before you've gone through Reddit's app-creation flow.
  */
 import type { AutomodKeyword, RedditRule, SubredditStatus } from "./types";
 
 const TOKEN_URL = "https://www.reddit.com/api/v1/access_token";
-const API_BASE = "https://oauth.reddit.com";
-
-export class RedditNotConfigured extends Error {}
+const OAUTH_BASE = "https://oauth.reddit.com";
+const PUBLIC_BASE = "https://www.reddit.com";
 
 interface CachedToken {
   accessToken: string;
@@ -18,44 +26,45 @@ interface CachedToken {
 
 const globalForToken = globalThis as unknown as { subfitRedditToken?: CachedToken };
 
-function getCreds() {
-  const clientId = process.env.REDDIT_CLIENT_ID || "";
-  const clientSecret = process.env.REDDIT_CLIENT_SECRET || "";
-  const userAgent = process.env.REDDIT_USER_AGENT || "subfit:draft-checker:v1.0";
-  if (!clientId || !clientSecret) {
-    throw new RedditNotConfigured(
-      "Reddit API credentials are not configured. Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET in your environment variables."
-    );
-  }
-  return { clientId, clientSecret, userAgent };
+function hasCredentials(): boolean {
+  return Boolean(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET);
 }
 
-async function getAccessToken(): Promise<{ token: string; userAgent: string }> {
-  const { clientId, clientSecret, userAgent } = getCreds();
+function getUserAgent(): string {
+  return process.env.REDDIT_USER_AGENT || "subfit:draft-checker:v1.0 (anonymous public access)";
+}
+
+async function getAccessToken(): Promise<string | null> {
+  if (!hasCredentials()) return null;
+
   const cached = globalForToken.subfitRedditToken;
   if (cached && cached.expiresAt > Date.now() + 10_000) {
-    return { token: cached.accessToken, userAgent };
+    return cached.accessToken;
   }
 
+  const clientId = process.env.REDDIT_CLIENT_ID!;
+  const clientSecret = process.env.REDDIT_CLIENT_SECRET!;
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: {
       Authorization: `Basic ${basic}`,
       "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": userAgent,
+      "User-Agent": getUserAgent(),
     },
     body: "grant_type=client_credentials",
   });
   if (!res.ok) {
-    throw new Error(`Reddit OAuth token request failed: ${res.status} ${await res.text()}`);
+    // Credentials are present but rejected/expired -- fall back to anonymous
+    // access rather than hard-failing every request.
+    return null;
   }
   const data = (await res.json()) as { access_token: string; expires_in: number };
   globalForToken.subfitRedditToken = {
     accessToken: data.access_token,
     expiresAt: Date.now() + data.expires_in * 1000,
   };
-  return { token: data.access_token, userAgent };
+  return data.access_token;
 }
 
 class RedditHttpError extends Error {
@@ -65,14 +74,13 @@ class RedditHttpError extends Error {
 }
 
 async function redditGet(path: string): Promise<unknown> {
-  const { token, userAgent } = await getAccessToken();
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "User-Agent": userAgent,
-    },
-    // Reddit's OAuth API doesn't redirect for these read endpoints; keep default.
-  });
+  const userAgent = getUserAgent();
+  const token = await getAccessToken();
+  const base = token ? OAUTH_BASE : PUBLIC_BASE;
+  const headers: Record<string, string> = { "User-Agent": userAgent };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${base}${path}`, { headers });
   if (!res.ok) {
     throw new RedditHttpError(res.status, await res.text().catch(() => res.statusText));
   }

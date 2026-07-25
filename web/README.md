@@ -9,8 +9,15 @@ for what SubFit does. Everything here runs as a single Next.js app:
   functions on Vercel).
 - **Database**: Postgres (Vercel Postgres / Neon, or any Postgres) instead of
   SQLite, since serverless functions don't have persistent local disk.
-- **Reddit access**: plain `fetch()` + OAuth2 `client_credentials` (the same
-  read-only "script app" flow PRAW uses) — no PRAW/Python involved.
+- **Reddit access**: plain `fetch()`, with two modes chosen automatically:
+  - **Authenticated** (recommended): if `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET`
+    are set, uses OAuth2 `client_credentials` (the same read-only "script app"
+    flow PRAW uses) — no PRAW/Python involved. Higher rate limits.
+  - **Anonymous fallback**: if no credentials are set, falls back to Reddit's
+    public, unauthenticated `.json` endpoints. **No Reddit app/registration
+    needed at all** — useful if you just want to try SubFit out, or if
+    Reddit's app-creation form (which requires solving a reCAPTCHA) is giving
+    you trouble. Lower rate limits, but enough for personal use and testing.
 - **Embeddings**: [transformers.js](https://huggingface.co/docs/transformers.js)
   running `Xenova/all-MiniLM-L6-v2` in Node (no Python/torch, no external LLM
   API calls) — the same model family the local app uses. This is best-effort:
@@ -25,10 +32,18 @@ that model, corpus fetching here is **chunked**: the UI kicks off a fetch job
 and polls a `step` endpoint repeatedly (with a progress bar) until the corpus
 is fully cached, instead of blocking on one long request.
 
-## 1. Create a Reddit API app
+## 1. (Optional) Create a Reddit API app
+
+This step is optional — skip it and SubFit will use Reddit's public API
+anonymously (lower rate limits, but works fine for personal use). Come back
+to this later if you want higher limits.
 
 Same as the local app — see the [repo root README](../README.md#1-create-a-reddit-api-app)
 for the step-by-step. You'll end up with a **client ID** and **client secret**.
+If Reddit's app-creation form's reCAPTCHA won't cooperate (a known pain
+point — try a different browser or check that third-party cookies aren't
+blocked if so), don't let it block you from trying SubFit out; just move on
+without it.
 
 ## 2. Provision a Postgres database
 
@@ -60,13 +75,16 @@ Edit `.env.local`:
 
 ```
 DATABASE_URL=postgres://...
+
+# Optional -- omit all three and SubFit uses Reddit's public API anonymously
 REDDIT_CLIENT_ID=the_personal_use_script_string
 REDDIT_CLIENT_SECRET=the_secret_string
 REDDIT_USER_AGENT=subfit:draft-checker:v1.0 (by u/your_reddit_username)
 ```
 
-On Vercel: **Project Settings → Environment Variables** — add the same three
-(`DATABASE_URL` should already exist if you used Vercel Postgres above).
+On Vercel: **Project Settings → Environment Variables** — add `DATABASE_URL`
+(should already exist if you used Vercel Postgres above) and, optionally, the
+three Reddit variables.
 
 ## 4. Run locally
 
