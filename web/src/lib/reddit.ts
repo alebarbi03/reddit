@@ -145,7 +145,9 @@ export async function fetchSubredditMeta(rawName: string): Promise<SubredditMeta
           over18: false,
           quarantined: false,
           status: "private",
-          status_detail: "Subreddit is private, quarantined, or otherwise forbidden.",
+          status_detail:
+            "Subreddit is private, quarantined, or otherwise forbidden. " +
+            `(Reddit response: ${e.message.slice(0, 300)})`,
         };
       }
       if (e.status === 404) {
