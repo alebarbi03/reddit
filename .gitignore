@@ -12,3 +12,8 @@ node_modules/
 *.egg-info/
 .pytest_cache/
 .ipynb_checkpoints/
+
+# funding_agent local state
+funding_agent/data/
+funding_agent/out/
+funding_agent/logs/
